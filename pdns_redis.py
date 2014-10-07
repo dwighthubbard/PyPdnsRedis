@@ -1,25 +1,5 @@
 #!/usr/bin/python
-
-__copyright__ = """
-pdns-redis.py, Copyright 2011, Bjarni R. Einarsson <http://bre.klaki.net/>
-                               and The Beanstalks Project ehf.
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published
-by the Free Software Foundation, either version 3 of the License, or (at
-your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Lesser General Public License for more details.
-
-You should have received a copy of the GNU Lesser General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
-
-BANNER = "pdns-redis.py, by Bjarni R. Einarsson"
-DOC = """\
 pdns-redis.py is Copyright 2012, Bjarni R. Einarsson, http://bre.klaki.net/
                                  and The Beanstalks Project ehf.
 
@@ -87,17 +67,35 @@ Examples:
 
 """
 
-import getopt
+__copyright__ = """
+pdns-redis.py, Copyright 2011, Bjarni R. Einarsson <http://bre.klaki.net/>
+                               and The Beanstalks Project ehf.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published
+by the Free Software Foundation, either version 3 of the License, or (at
+your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+"""
+
+BANNER = "pdns-redis.py, by Bjarni R. Einarsson"
+
 import re
 import redis
 import socket
 import sys
 import time
 import urllib
+import argparse
 import logging
 
-
-DEBUG = False
 
 OPT_COMMON_FLAGS = 'A:R:W:z'
 OPT_COMMON_ARGS = ['auth=', 'redis=', 'redis_write=', 'reset']
@@ -113,7 +111,7 @@ TTL_SUFFIXES = {
     'W': 60 * 60 * 24 * 7,
 }
 MAGIC_SELF_IP = 'self'
-MAGIC_TEST_VALIDITY = 60 # seconds
+MAGIC_TEST_VALIDITY = 60  # seconds
 
 REDIS_PREFIX = 'pdns.'
 
@@ -128,7 +126,8 @@ class MockRedis(object):
         return True
 
     def get(self, key):
-        if key in self.data: return self.data[key]
+        if key in self.data:
+            return self.data[key]
         return None
 
     def encode(self, val):
@@ -143,17 +142,20 @@ class MockRedis(object):
         return True
 
     def setnx(self, key, val):
-        if key in self.data: return None
+        if key in self.data:
+            return None
         self.data[key] = self.encode(val)
         return val
 
     def incr(self, key):
-        if key not in self.data: self.data[key] = 0
+        if key not in self.data:
+            self.data[key] = 0
         self.data[key] = self.encode(int(self.data[key]) + 1)
         return int(self.data[key])
 
     def incrby(self, key, val):
-        if key not in self.data: self.data[key] = 0
+        if key not in self.data:
+            self.data[key] = 0
         self.data[key] = self.encode(int(self.data[key]) + int(val))
         return int(self.data[key])
 
@@ -165,30 +167,37 @@ class MockRedis(object):
             return False
 
     def hget(self, key, hkey):
-        if key in self.data and hkey in self.data[key]: return self.data[key][hkey]
+        if key in self.data and hkey in self.data[key]:
+            return self.data[key][hkey]
         return None
 
     def hincrby(self, key, hkey, val):
-        if key not in self.data: self.data[key] = {}
-        if hkey not in self.data[key]: self.data[key][hkey] = 0
+        if key not in self.data:
+            self.data[key] = {}
+        if hkey not in self.data[key]:
+            self.data[key][hkey] = 0
         self.data[key][hkey] = self.encode(int(self.data[key][hkey]) + int(val))
         return int(self.data[key][hkey])
 
     def hgetall(self, key):
-        if key in self.data: return self.data[key]
+        if key in self.data:
+            return self.data[key]
         return {}
 
     def hdel(self, key, hkey):
-        if key in self.data and hkey in self.data[key]: del (self.data[key][hkey])
+        if key in self.data and hkey in self.data[key]:
+            del (self.data[key][hkey])
         return True
 
     def hset(self, key, hkey, val):
-        if key not in self.data: self.data[key] = {}
+        if key not in self.data:
+            self.data[key] = {}
         self.data[key][hkey] = self.encode(val)
         return True
 
     def sadd(self, key, member):
-        if key not in self.data: self.data[key] = {}
+        if key not in self.data:
+            self.data[key] = {}
         self.data[key][member] = 1
         return True
 
@@ -205,7 +214,8 @@ class MockRedis(object):
         return True
 
     def llen(self, key):
-        if key not in self.data: return 0
+        if key not in self.data:
+            return 0
         return len(self.data[key])
 
     def lpop(self, key):
@@ -366,9 +376,6 @@ class PdnsChatter(Task):
         self.qop = query_op or QueryOp
         self.wildcards = wildcards
         self.log_buffer = []
-        syslog.openlog((sys.argv[0] or 'pdns_redis.py').split('/')[-1],
-                       syslog.LOG_PID, syslog.LOG_DAEMON)
-
 
     def reply(self, text):
         self.outfile.write(text)
@@ -614,6 +621,37 @@ class PdnsRedis(object):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    redis_args_group = parser.add_argument_group('Redis Settings')
+    redis_args_group.add_argument(
+        '--redis_server', '-R', default='localhost:6379', help='Redis backend host:port (default: %(default)s)')
+    redis_args_group.add_argument(
+        '--redis_write_server', '-W', default=None, help='Redis write backend (default: %(default)s)')
+    redis_args_group.add_argument(
+        '--redis_password_filename', '-A', default=None, help='Redis password file (default: %(default)s)')
+
+    powerdns_args_group = parser.add_argument_group('PowerDNS backend settings')
+    powerdns_args_group.add_argument(
+        '--pydns_backend', '-P', action='store_true', help='Run as a PowerDNS pipe backend')
+    powerdns_args_group.add_argument(
+        '--enable_wildcard_lookups', '-w', action='store_true', help='Enable PowerDNS wildcard lookups')
+
+    dns_args_group = parser.add_argument_group('Add DNS settings')
+    dns_args_group.add_argument('--domain', '-D', help='Domain name')
+    dns_args_group.add_argument(
+        '--record_type', '-r', choices=VALID_RECORDS, help='Record type')
+    dns_args_group.add_argument('--data', '-d', help='DNS Record value')
+    dns_args_group.add_argument(
+        '--ttl', '-a',
+        help='Add using a given TTL (requires -r and -d).  The TTL is in seconds, but may use a suffix of M, H, D or W '
+             'for minutes, hours, days or weeks respectively.'
+    )
+    dns_args_group.add_argument('--zero', '-z', action='store_true', help='Zero out the record')
+    dns_args_group.add_argument('--delete', '-k', action='store_true', help='Delete (kill) the record')
+
+    args = parser.parse_args()
+    print args
+    sys.exit(0)
     try:
         pr = PdnsRedis().ParseArgs(sys.argv[1:]).RunTasks()
     except ArgumentError, e:

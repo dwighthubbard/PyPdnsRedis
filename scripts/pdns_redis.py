@@ -95,7 +95,7 @@ import time
 import urllib
 import argparse
 import logging
-
+from PyPdnsRedis.mock import MockRedis
 
 OPT_COMMON_FLAGS = 'A:R:W:z'
 OPT_COMMON_ARGS = ['auth=', 'redis=', 'redis_write=', 'reset']
@@ -114,112 +114,6 @@ MAGIC_SELF_IP = 'self'
 MAGIC_TEST_VALIDITY = 60  # seconds
 
 REDIS_PREFIX = 'pdns.'
-
-
-class MockRedis(object):
-    """A mock-redis object for quick offline tests."""
-
-    def __init__(self, host=None, port=None, password=None):
-        self.data = {}
-
-    def ping(self):
-        return True
-
-    def get(self, key):
-        if key in self.data:
-            return self.data[key]
-        return None
-
-    def encode(self, val):
-        if isinstance(val, str):
-            return val
-        if isinstance(val, unicode):
-            return val.encode('utf-8')
-        return str(val)
-
-    def set(self, key, val):
-        self.data[key] = self.encode(val)
-        return True
-
-    def setnx(self, key, val):
-        if key in self.data:
-            return None
-        self.data[key] = self.encode(val)
-        return val
-
-    def incr(self, key):
-        if key not in self.data:
-            self.data[key] = 0
-        self.data[key] = self.encode(int(self.data[key]) + 1)
-        return int(self.data[key])
-
-    def incrby(self, key, val):
-        if key not in self.data:
-            self.data[key] = 0
-        self.data[key] = self.encode(int(self.data[key]) + int(val))
-        return int(self.data[key])
-
-    def delete(self, key):
-        if key in self.data:
-            del (self.data[key])
-            return True
-        else:
-            return False
-
-    def hget(self, key, hkey):
-        if key in self.data and hkey in self.data[key]:
-            return self.data[key][hkey]
-        return None
-
-    def hincrby(self, key, hkey, val):
-        if key not in self.data:
-            self.data[key] = {}
-        if hkey not in self.data[key]:
-            self.data[key][hkey] = 0
-        self.data[key][hkey] = self.encode(int(self.data[key][hkey]) + int(val))
-        return int(self.data[key][hkey])
-
-    def hgetall(self, key):
-        if key in self.data:
-            return self.data[key]
-        return {}
-
-    def hdel(self, key, hkey):
-        if key in self.data and hkey in self.data[key]:
-            del (self.data[key][hkey])
-        return True
-
-    def hset(self, key, hkey, val):
-        if key not in self.data:
-            self.data[key] = {}
-        self.data[key][hkey] = self.encode(val)
-        return True
-
-    def sadd(self, key, member):
-        if key not in self.data:
-            self.data[key] = {}
-        self.data[key][member] = 1
-        return True
-
-    def srem(self, key, member):
-        if key in self.data and member in self.data[key]:
-            del self.data[key][member]
-            return True
-        return False
-
-    def lpush(self, key, value):
-        if key not in self.data:
-            self.data[key] = []
-        self.data[key].append(value)
-        return True
-
-    def llen(self, key):
-        if key not in self.data:
-            return 0
-        return len(self.data[key])
-
-    def lpop(self, key):
-        return self.data[key].pop(0)
 
 
 class Error(Exception):
@@ -562,9 +456,12 @@ class PdnsRedis(object):
         opts, args = self.ParseWithCommonArgs(argv, OPT_FLAGS, OPT_ARGS)
 
         for opt, arg in opts:
-            if opt in ('-D', '--domain'): self.q_domain = arg
-            if opt in ('-r', '--record'): self.q_record = arg
-            if opt in ('-d', '--data'): self.q_data = arg
+            if opt in ('-D', '--domain'):
+                self.q_domain = arg
+            if opt in ('-r', '--record'):
+                self.q_record = arg
+            if opt in ('-d', '--data'):
+                self.q_data = arg
 
             if opt in ('-q', '--query'):
                 self.tasks.append(QueryOp(self,
@@ -599,7 +496,8 @@ class PdnsRedis(object):
         return self.be
 
     def WBE(self):
-        if not self.redis_write_host: return self.BE()
+        if not self.redis_write_host:
+            return self.BE()
         if not self.wbe:
             if self.redis_write_host == 'mock':
                 self.wbe = MockRedis()
